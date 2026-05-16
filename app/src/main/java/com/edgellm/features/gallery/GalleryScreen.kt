@@ -14,10 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.edgellm.download.DownloadState
-import com.edgellm.download.ModelInfo
-import com.edgellm.huggingface.HFModel
-import com.edgellm.huggingface.formatFileSize
+import com.edgellm.core.util.formatSize
+import com.edgellm.domain.model.HFModel
+import com.edgellm.domain.model.ModelType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,7 +49,7 @@ fun GalleryScreen(
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1; viewModel.refreshInstalledModels() },
-                    text = { Text("Installed") }
+                    text = { Text("Installed (${uiState.installedModels.size})") }
                 )
             }
 
@@ -69,7 +68,6 @@ private fun BrowseTab(
     onModelSelected: (HFModel) -> Unit
 ) {
     Column {
-        // Search bar
         OutlinedTextField(
             value = uiState.searchQuery,
             onValueChange = { viewModel.search(it) },
@@ -81,12 +79,11 @@ private fun BrowseTab(
             singleLine = true
         )
 
-        // Filter chips
         LazyRow(
             modifier = Modifier.padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(HFFilterType.entries.toList()) { filter ->
+            items(ModelFilterTypeUI.entries.toList()) { filter ->
                 FilterChip(
                     selected = uiState.filterType == filter,
                     onClick = { viewModel.setFilter(filter) },
@@ -97,7 +94,6 @@ private fun BrowseTab(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Model list
         if (uiState.isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -118,6 +114,22 @@ private fun BrowseTab(
                     }
                 }
             }
+        } else if (uiState.models.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.SearchOff,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("No models found")
+                }
+            }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -127,7 +139,7 @@ private fun BrowseTab(
                 items(uiState.models) { model ->
                     ModelCard(
                         model = model,
-                        downloadState = uiState.downloadProgress["${model.id}/${model.files?.firstOrNull()?.rfilename}"],
+                        downloadProgress = uiState.downloadProgress["${model.id}/${model.files.firstOrNull()?.name}"],
                         onClick = { onModelSelected(model) },
                         onDownload = { filename ->
                             viewModel.downloadModel(model, filename)
@@ -175,7 +187,7 @@ private fun InstalledTab(
             items(uiState.installedModels) { model ->
                 InstalledModelCard(
                     model = model,
-                    onDelete = { viewModel.deleteModel(model.modelId) }
+                    onDelete = { viewModel.deleteModel(model.id) }
                 )
             }
         }
@@ -185,10 +197,13 @@ private fun InstalledTab(
 @Composable
 private fun ModelCard(
     model: HFModel,
-    downloadState: DownloadState?,
+    downloadProgress: Float?,
     onClick: () -> Unit,
     onDownload: (String) -> Unit
 ) {
+    val ggufFiles = model.files.filter { it.isGGUF }
+    val litertFiles = model.files.filter { it.isLiteRT }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -217,15 +232,14 @@ private fun ModelCard(
                     }
                 }
 
-                // Model type badges
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (model.hasGGUF()) {
+                    if (ggufFiles.isNotEmpty()) {
                         SuggestionChip(
                             onClick = { },
                             label = { Text("GGUF", style = MaterialTheme.typography.labelSmall) }
                         )
                     }
-                    if (model.hasLitertlm()) {
+                    if (litertFiles.isNotEmpty()) {
                         SuggestionChip(
                             onClick = { },
                             label = { Text("LiteRT", style = MaterialTheme.typography.labelSmall) }
@@ -248,10 +262,7 @@ private fun ModelCard(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            formatDownloadCount(model.downloads),
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text(formatCount(model.downloads), style = MaterialTheme.typography.bodySmall)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -260,39 +271,33 @@ private fun ModelCard(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            model.upvotes.toString(),
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text(model.likes.toString(), style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
-                val fileSize = model.getFileSize()
-                if (fileSize.isNotEmpty() && fileSize != "0 B") {
+                if (model.size > 0) {
                     Text(
-                        text = fileSize,
+                        text = model.size.formatSize(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // Download progress
-            val key = "${model.id}/${model.files?.firstOrNull()?.rfilename}"
-            when (val state = downloadState) {
-                is DownloadState.Downloading -> {
+            when {
+                downloadProgress != null && downloadProgress < 1f -> {
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(
-                        progress = { state.progress },
+                        progress = { downloadProgress },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        text = "${(state.progress * 100).toInt()}% - ${formatFileSize(state.downloaded)} / ${formatFileSize(state.total)}",
+                        text = "${(downloadProgress * 100).toInt()}%",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                is DownloadState.Completed -> {
+                downloadProgress == 1f -> {
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -305,29 +310,17 @@ private fun ModelCard(
                         Text("Downloaded", color = MaterialTheme.colorScheme.primary)
                     }
                 }
-                is DownloadState.Failed -> {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Failed: ${state.error}",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
                 else -> {
-                    // Show download button for first GGUF or LiteRT file
-                    val downloadFile = model.files?.firstOrNull { 
-                        it.rfilename.endsWith(".gguf", ignoreCase = true) 
-                            || it.rfilename.endsWith(".litertlm", ignoreCase = true) 
-                    }
+                    val downloadFile = ggufFiles.firstOrNull() ?: litertFiles.firstOrNull()
                     if (downloadFile != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
-                            onClick = { onDownload(downloadFile.rfilename) },
+                            onClick = { onDownload(downloadFile.name) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Download ${formatFileSize(downloadFile.size)}")
+                            Text("Download ${downloadFile.size.formatSize()}")
                         }
                     }
                 }
@@ -338,7 +331,7 @@ private fun ModelCard(
 
 @Composable
 private fun InstalledModelCard(
-    model: ModelInfo,
+    model: HFModel,
     onDelete: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -347,7 +340,7 @@ private fun InstalledModelCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Model") },
-            text = { Text("Are you sure you want to delete ${model.modelId}? This will remove all model files.") },
+            text = { Text("Are you sure you want to delete ${model.id}?") },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete()
@@ -373,7 +366,7 @@ private fun InstalledModelCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = model.modelId,
+                        text = model.id,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
@@ -386,12 +379,10 @@ private fun InstalledModelCard(
                     )
                 }
 
-                Row {
-                    SuggestionChip(
-                        onClick = { },
-                        label = { Text(model.type) }
-                    )
-                }
+                SuggestionChip(
+                    onClick = { },
+                    label = { Text(model.modelType.name) }
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -402,7 +393,7 @@ private fun InstalledModelCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = model.formattedSize,
+                    text = model.size.formatSize(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -422,7 +413,7 @@ private fun InstalledModelCard(
     }
 }
 
-private fun formatDownloadCount(count: Int): String {
+private fun formatCount(count: Int): String {
     return when {
         count >= 1_000_000 -> String.format("%.1fM", count / 1_000_000.0)
         count >= 1_000 -> String.format("%.1fK", count / 1_000.0)

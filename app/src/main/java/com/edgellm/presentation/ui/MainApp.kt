@@ -119,7 +119,7 @@ fun MainApp(edgeService: EdgeLLMService?) {
                 )
             }
             composable("settings") {
-                com.edgellm.features.settings.SettingsScreen(edgeService)
+                com.edgellm.features.settings.SettingsScreen()
             }
         }
     }

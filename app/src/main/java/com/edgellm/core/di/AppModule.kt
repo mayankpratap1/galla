@@ -4,11 +4,14 @@ import android.content.Context
 import com.edgellm.core.network.NetworkClient
 import com.edgellm.core.network.OkHttpNetworkClient
 import com.edgellm.data.local.PreferencesManager
+import com.edgellm.data.remote.CloudApiClient
 import com.edgellm.data.remote.HuggingFaceApi
-import com.edgellm.data.repository.ModelRepositoryImpl
+import com.edgellm.data.repository.CloudRepositoryImpl
 import com.edgellm.data.repository.DownloadRepositoryImpl
-import com.edgellm.domain.repository.ModelRepository
+import com.edgellm.data.repository.ModelRepositoryImpl
+import com.edgellm.domain.repository.CloudRepository
 import com.edgellm.domain.repository.DownloadRepository
+import com.edgellm.domain.repository.ModelRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -40,7 +43,7 @@ object NetworkModule {
                 chain.proceed(request)
             }
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS) // Longer for streaming
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
     }
@@ -55,6 +58,12 @@ object NetworkModule {
     @Singleton
     fun provideHuggingFaceApi(networkClient: NetworkClient): HuggingFaceApi {
         return HuggingFaceApi(networkClient)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCloudApiClient(okHttpClient: OkHttpClient): CloudApiClient {
+        return CloudApiClient(okHttpClient)
     }
 }
 
@@ -85,6 +94,15 @@ object DataModule {
     ): DownloadRepository {
         return DownloadRepositoryImpl(context, networkClient)
     }
+
+    @Provides
+    @Singleton
+    fun provideCloudRepository(
+        cloudApiClient: CloudApiClient,
+        preferencesManager: PreferencesManager
+    ): CloudRepository {
+        return CloudRepositoryImpl(cloudApiClient, preferencesManager)
+    }
 }
 
 @Module
@@ -98,4 +116,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindDownloadRepository(impl: DownloadRepositoryImpl): DownloadRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCloudRepository(impl: CloudRepositoryImpl): CloudRepository
 }

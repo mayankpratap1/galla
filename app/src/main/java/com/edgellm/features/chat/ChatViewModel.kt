@@ -2,78 +2,171 @@ package com.edgellm.features.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.edgellm.core.error.Resource
+import com.edgellm.domain.model.*
+import com.edgellm.domain.repository.CloudRepository
+import com.edgellm.engine.InferenceEngine
+import com.edgellm.domain.usecase.SendCloudMessageUseCase
+import com.edgellm.domain.usecase.StreamCloudMessageUseCase
 import com.edgellm.skills.SkillManager
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-data class ChatState(
+data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
-    val isGenerating: Boolean = false,
-    val modelLoaded: Boolean = false,
-    val error: String? = null
+    val inputText: String = "",
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val selectedModel: ModelSelection = ModelSelection.Local,
+    val availableModels: List<String> = emptyList(),
+    val currentProvider: ProviderType = ProviderType.OPENAI,
+    val currentCloudModel: String = "gpt-4o-mini"
 )
 
-class ChatViewModel : ViewModel() {
-    private val _state = MutableStateFlow(ChatState())
-    val state: StateFlow<ChatState> = _state
+sealed class ModelSelection {
+    data object Local : ModelSelection()
+    data class Cloud(val provider: ProviderType, val model: String) : ModelSelection()
+}
 
-    var engineRef: com.edgellm.engine.InferenceEngine? = null
+@HiltViewModel
+class ChatViewModel @Inject constructor(
+    private val sendCloudMessageUseCase: SendCloudMessageUseCase,
+    private val streamCloudMessageUseCase: StreamCloudMessageUseCase
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(ChatUiState())
+    val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+
+    var engineRef: InferenceEngine? = null
     var skillManager: SkillManager? = null
-    var agentSkillsEnabled: Boolean = false
+    var agentSkillsEnabled: Boolean = true
 
-    // Called from MainNavigation after service binds
+    private var streamingJob: Job? = null
+
     fun setModelLoaded(loaded: Boolean) {
-        _state.value = _state.value.copy(modelLoaded = loaded)
+        _uiState.update { it.copy(availableModels = if (loaded) listOfNotNull(engineRef?.modelName) else emptyList()) }
     }
 
-    fun sendMessage(text: String) {
-        val engine = engineRef ?: run {
-            _state.value = _state.value.copy(error = "No model loaded. Go to Settings to load a model.")
-            return
+    fun onInputChange(text: String) {
+        _uiState.update { it.copy(inputText = text) }
+    }
+
+    fun sendMessage() {
+        val input = _uiState.value.inputText.trim()
+        if (input.isBlank()) return
+
+        val userMessage = ChatMessage(role = MessageRole.USER, content = input)
+        _uiState.update {
+            it.copy(
+                messages = it.messages + userMessage,
+                inputText = "",
+                isLoading = true,
+                error = null
+            )
         }
 
-        val history = _state.value.messages + ChatMessage("user", text)
-        _state.value = _state.value.copy(
-            messages = history + ChatMessage("assistant", ""),
-            isGenerating = true,
-            error = null
-        )
+        when (val selection = _uiState.value.selectedModel) {
+            is ModelSelection.Local -> sendLocalMessage(input)
+            is ModelSelection.Cloud -> sendCloudMessage(input, selection.provider, selection.model)
+        }
+    }
 
+    private fun sendLocalMessage(input: String) {
         viewModelScope.launch {
-            val systemPrompt = if (agentSkillsEnabled) {
-                skillManager?.buildSkillSystemPrompt(skillManager!!.skills.value) ?: ""
-            } else ""
-
-            val promptParts = buildList {
-                if (systemPrompt.isNotEmpty()) add("System: $systemPrompt")
-                history.forEach { add("${it.role.replaceFirstChar { c -> c.uppercase() }}: ${it.content}") }
-                add("Assistant:")
-            }
-            val prompt = promptParts.joinToString("\n")
-
-            var fullText = ""
             try {
-                engine.generateStream(prompt).collect { token ->
-                    fullText += token
-                    val (thinking, display) = processThinkingTags(fullText)
-                    val updated = _state.value.messages.dropLast(1) +
-                        ChatMessage("assistant", display, thinking.ifEmpty { null })
-                    _state.value = _state.value.copy(messages = updated)
+                val engine = engineRef
+                if (engine == null || !engine.isLoaded) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "No model loaded. Please load a model first."
+                        )
+                    }
+                    return@launch
+                }
+
+                val response = engine.generate(input)
+                val assistantMessage = ChatMessage(
+                    role = MessageRole.ASSISTANT,
+                    content = response
+                )
+                _uiState.update {
+                    it.copy(
+                        messages = it.messages + assistantMessage,
+                        isLoading = false
+                    )
                 }
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = "Generation error: ${e.message}")
-            } finally {
-                _state.value = _state.value.copy(isGenerating = false)
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = e.message ?: "Generation failed"
+                    )
+                }
             }
         }
     }
 
-    // Extracts <think>...</think> → Pair(thinkingText, displayText)
-    private fun processThinkingTags(text: String): Pair<String, String> {
-        val thinkRegex = Regex("<think>(.*?)</think>", RegexOption.DOT_MATCHES_ALL)
-        val thinking = thinkRegex.findAll(text).joinToString("\n") { it.groupValues[1] }
-        val display  = thinkRegex.replace(text, "").trim()
-        return Pair(thinking, display)
+    private fun sendCloudMessage(input: String, provider: ProviderType, model: String) {
+        viewModelScope.launch {
+            val messages = _uiState.value.messages + ChatMessage(role = MessageRole.USER, content = input)
+
+            when (val result = sendCloudMessageUseCase(
+                provider = provider,
+                model = model,
+                messages = messages,
+                temperature = 0.7,
+                maxTokens = 2048
+            )) {
+                is Resource.Success -> {
+                    val response = result.data.choices.firstOrNull()?.message?.content ?: ""
+                    _uiState.update {
+                        it.copy(
+                            messages = it.messages + ChatMessage(role = MessageRole.ASSISTANT, content = response),
+                            isLoading = false
+                        )
+                    }
+                }
+                is Resource.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = result.failure.message
+                        )
+                    }
+                }
+                is Resource.Loading -> {}
+            }
+        }
+    }
+
+    fun selectModel(modelName: String) {
+        _uiState.update { it.copy(selectedModel = ModelSelection.Local) }
+    }
+
+    fun selectCloudModel(provider: ProviderType, model: String) {
+        _uiState.update {
+            it.copy(
+                selectedModel = ModelSelection.Cloud(provider, model),
+                currentProvider = provider,
+                currentCloudModel = model
+            )
+        }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
+    fun clearChat() {
+        _uiState.update { it.copy(messages = emptyList(), error = null) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        streamingJob?.cancel()
     }
 }
