@@ -8,15 +8,21 @@ import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.edgellm.presentation.ui.MainApp
+import com.edgellm.presentation.ui.theme.EdgeLLMTheme
 import com.edgellm.service.EdgeLLMService
-import com.edgellm.ui.MainNavigation
-import com.edgellm.ui.theme.EdgeLLMProTheme
+import dagger.hilt.android.AndroidEntryPoint
 
-// CompositionLocal to provide the service to all screens
-val LocalEdgeLLMService = staticCompositionLocalOf<EdgeLLMService?> { null }
-
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
     private var edgeService by mutableStateOf<EdgeLLMService?>(null)
 
     private val connection = object : ServiceConnection {
@@ -31,17 +37,21 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
-        
-        // Start and bind the service
+        enableEdgeToEdge()
+
         val intent = Intent(this, EdgeLLMService::class.java)
         startForegroundService(intent)
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
 
         setContent {
-            EdgeLLMProTheme {
-                CompositionLocalProvider(LocalEdgeLLMService provides edgeService) {
-                    MainNavigation()
+            EdgeLLMTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainApp(edgeService = edgeService)
                 }
             }
         }
@@ -52,3 +62,5 @@ class MainActivity : ComponentActivity() {
         unbindService(connection)
     }
 }
+
+val LocalEdgeLLMService = staticCompositionLocalOf<EdgeLLMService?> { null }

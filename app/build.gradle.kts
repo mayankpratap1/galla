@@ -4,6 +4,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android")
 }
 
 android {
@@ -107,4 +108,27 @@ dependencies {
 
     // ── Security: Encrypted SharedPreferences for API keys ──
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // ── Hilt: Dependency Injection (Enterprise) ──
+    implementation("com.google.dagger:hilt-android:2.51.1")
+    ksp("com.google.dagger:hilt-compiler:2.51.1")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    // ── Retrofit: HTTP Client (Enterprise) ──
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // ── Coroutines + Flow ──
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+
+    // ── Accompanist: System UI Controller ──
+    implementation("com.google.accompanist:accompanist-systemuicontroller:0.34.0")
+
+    // ── Splash Screen ──
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // ── Lifecycle ──
+    implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
 }

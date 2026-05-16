@@ -1,42 +1,47 @@
 package com.edgellm.features.gallery
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.edgellm.download.DownloadState
-import com.edgellm.download.ModelDownloadService
-import com.edgellm.download.ModelInfo
-import com.edgellm.huggingface.HFFilterType
-import com.edgellm.huggingface.HFModel
-import com.edgellm.huggingface.HuggingFaceApiClient
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import com.edgellm.core.error.Resource
+import com.edgellm.domain.model.DownloadProgress
+import com.edgellm.domain.model.DownloadState
+import com.edgellm.domain.model.HFModel
+import com.edgellm.domain.model.ModelFilter
+import com.edgellm.domain.model.ModelFilterType
+import com.edgellm.domain.usecase.*
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class GalleryUiState(
     val isLoading: Boolean = false,
     val models: List<HFModel> = emptyList(),
-    val installedModels: List<ModelInfo> = emptyList(),
+    val installedModels: List<HFModel> = emptyList(),
     val searchQuery: String = "",
-    val filterType: HFFilterType = HFFilterType.TRENDING,
+    val filterType: ModelFilterTypeUI = ModelFilterTypeUI.TRENDING,
     val error: String? = null,
     val selectedModel: HFModel? = null,
-    val downloadProgress: Map<String, DownloadState> = emptyMap()
+    val downloadProgress: Map<String, Float> = emptyMap(),
+    val availableStorage: Long = 0L
 )
 
-sealed class HFFilterType(val displayName: String) {
-    data object Trending : HFFilterType("Trending")
-    data object GGUF : HFFilterType("GGUF Models")
-    data object LiteRT : HFFilterType("LiteRT Models")
-    data object Chat : HFFilterType("Chat Models")
-    data object Vision : HFFilterType("Vision Models")
+enum class ModelFilterTypeUI(val displayName: String) {
+    TRENDING("Trending"),
+    GGUF("GGUF Models"),
+    LITERT("LiteRT Models"),
+    CHAT("Chat Models"),
+    VISION("Vision Models")
 }
 
-class GalleryViewModel(
-    private val apiClient: HuggingFaceApiClient,
-    private val downloadService: ModelDownloadService
+@HiltViewModel
+class GalleryViewModel @Inject constructor(
+    private val searchModelsUseCase: SearchModelsUseCase,
+    private val getInstalledModelsUseCase: GetInstalledModelsUseCase,
+    private val deleteModelUseCase: DeleteModelUseCase,
+    private val downloadModelUseCase: DownloadModelUseCase,
+    private val observeDownloadsUseCase: ObserveDownloadsUseCase,
+    private val getAvailableStorageUseCase: GetAvailableStorageUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(GalleryUiState())
@@ -46,143 +51,130 @@ class GalleryViewModel(
         loadModels()
         refreshInstalledModels()
         observeDownloads()
+        updateStorageInfo()
     }
 
     fun loadModels() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.update { it.copy(isLoading = true, error = null) }
 
-            val result = when (_uiState.value.filterType) {
-                HFFilterType.Trending -> apiClient.getTrendingModels(20)
-                HFFilterType.GGUF -> apiClient.getGGUFModels(20)
-                HFFilterType.LiteRT -> apiClient.getLiteRTModels(20)
-                HFFilterType.Chat -> apiClient.searchModels(
-                    com.edgellm.huggingface.HFModelFilter(
-                        task = com.edgellm.huggingface.HFTask.CONVERSATIONAL,
-                        limit = 20
-                    )
-                ).map { it.models }
-                HFFilterType.Vision -> apiClient.searchModels(
-                    com.edgellm.huggingface.HFModelFilter(
-                        task = com.edgellm.huggingface.HFTask.IMAGE_TO_TEXT,
-                        limit = 20
-                    )
-                ).map { it.models }
-            }
-
-            result.fold(
-                onSuccess = { models ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        models = models
-                    )
-                },
-                onFailure = { e ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = e.message ?: "Failed to load models"
-                    )
-                }
+            val filter = ModelFilter(
+                type = _uiState.value.filterType.toDomain(),
+                limit = 20
             )
+
+            when (val result = searchModelsUseCase(filter)) {
+                is Resource.Success -> {
+                    _uiState.update {
+                        it.copy(isLoading = false, models = result.data)
+                    }
+                }
+                is Resource.Error -> {
+                    _uiState.update {
+                        it.copy(isLoading = false, error = result.failure.message)
+                    }
+                }
+                is Resource.Loading -> {}
+            }
         }
     }
 
     fun search(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
-        
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        _uiState.update { it.copy(searchQuery = query) }
 
-            val result = apiClient.searchModels(
-                com.edgellm.huggingface.HFModelFilter(
-                    searchQuery = query,
-                    limit = 20
-                )
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+
+            val filter = ModelFilter(
+                query = query,
+                limit = 20
             )
 
-            result.fold(
-                onSuccess = { response ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        models = response.models
-                    )
-                },
-                onFailure = { e ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = e.message
-                    )
+            when (val result = searchModelsUseCase(filter)) {
+                is Resource.Success -> {
+                    _uiState.update {
+                        it.copy(isLoading = false, models = result.data)
+                    }
                 }
-            )
-        }
-    }
-
-    fun setFilter(filterType: HFFilterType) {
-        _uiState.value = _uiState.value.copy(filterType = filterType, searchQuery = "")
-        loadModels()
-    }
-
-    fun selectModel(model: HFModel) {
-        _uiState.value = _uiState.value.copy(selectedModel = model)
-    }
-
-    fun clearSelectedModel() {
-        _uiState.value = _uiState.value.copy(selectedModel = null)
-    }
-
-    fun downloadModel(model: HFModel, filename: String) {
-        val downloadUrl = apiClient.getDirectDownloadUrl(model.id, filename)
-        
-        viewModelScope.launch {
-            val result = downloadService.download(
-                modelId = model.id,
-                filename = filename,
-                downloadUrl = downloadUrl
-            )
-
-            result.fold(
-                onSuccess = {
-                    refreshInstalledModels()
-                },
-                onFailure = { e ->
-                    _uiState.value = _uiState.value.copy(
-                        error = "Download failed: ${e.message}"
-                    )
+                is Resource.Error -> {
+                    _uiState.update {
+                        it.copy(isLoading = false, error = result.failure.message)
+                    }
                 }
-            )
-        }
-    }
-
-    fun deleteModel(modelId: String) {
-        downloadService.deleteModel(modelId)
-        refreshInstalledModels()
-    }
-
-    fun refreshInstalledModels() {
-        val models = downloadService.getInstalledModels()
-        _uiState.value = _uiState.value.copy(installedModels = models)
-    }
-
-    private fun observeDownloads() {
-        viewModelScope.launch {
-            downloadService.downloads.collect { downloads ->
-                val progressMap = downloads.mapValues { it.value.state }
-                _uiState.value = _uiState.value.copy(downloadProgress = progressMap)
+                is Resource.Loading -> {}
             }
         }
     }
 
-    fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+    fun setFilter(filterType: ModelFilterTypeUI) {
+        _uiState.update { it.copy(filterType = filterType, searchQuery = "") }
+        loadModels()
     }
 
-    class Factory(private val context: Context) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return GalleryViewModel(
-                apiClient = HuggingFaceApiClient(),
-                downloadService = ModelDownloadService(context)
-            ) as T
+    fun selectModel(model: HFModel) {
+        _uiState.update { it.copy(selectedModel = model) }
+    }
+
+    fun clearSelectedModel() {
+        _uiState.update { it.copy(selectedModel = null) }
+    }
+
+    fun downloadModel(model: HFModel, filename: String) {
+        val file = model.files.find { it.name == filename } ?: return
+        val downloadUrl = "https://huggingface.co/${model.id}/resolve/main/$filename"
+
+        viewModelScope.launch {
+            when (val result = downloadModelUseCase(model, filename, downloadUrl, file.size)) {
+                is Resource.Success -> {
+                    refreshInstalledModels()
+                }
+                is Resource.Error -> {
+                    _uiState.update { it.copy(error = "Download failed: ${result.failure.message}") }
+                }
+                is Resource.Loading -> {}
+            }
+        }
+    }
+
+    fun deleteModel(modelId: String) {
+        viewModelScope.launch {
+            when (deleteModelUseCase(modelId)) {
+                is Resource.Success -> refreshInstalledModels()
+                is Resource.Error -> { /* Handle error */ }
+                is Resource.Loading -> {}
+            }
+        }
+    }
+
+    fun refreshInstalledModels() {
+        val models = getInstalledModelsUseCase()
+        _uiState.update { it.copy(installedModels = models) }
+    }
+
+    private fun observeDownloads() {
+        viewModelScope.launch {
+            observeDownloadsUseCase().collect { downloads ->
+                val progressMap = downloads.mapValues { it.value.progress }
+                _uiState.update { it.copy(downloadProgress = progressMap) }
+            }
+        }
+    }
+
+    private fun updateStorageInfo() {
+        _uiState.update { it.copy(availableStorage = getAvailableStorageUseCase()) }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
+    private fun ModelFilterTypeUI.toDomain(): ModelFilterType {
+        return when (this) {
+            ModelFilterTypeUI.TRENDING -> ModelFilterType.TRENDING
+            ModelFilterTypeUI.GGUF -> ModelFilterType.GGUF
+            ModelFilterTypeUI.LITERT -> ModelFilterType.LITERT
+            ModelFilterTypeUI.CHAT -> ModelFilterType.CHAT
+            ModelFilterTypeUI.VISION -> ModelFilterType.VISION
         }
     }
 }
