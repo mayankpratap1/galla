@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<data-extraction-rules xmlns:android="http://schemas.android.com/apk/res/android">
+<data-extraction-rules xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <cloud-backup>
-        <exclude android:domain="file" path="."/>
+        <exclude domain="file" path="." />
     </cloud-backup>
     <device-transfer>
-        <exclude android:domain="file" path="."/>
+        <exclude domain="file" path="." />
     </device-transfer>
 </data-extraction-rules>
