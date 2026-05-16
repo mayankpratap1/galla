@@ -1,0 +1,3 @@
+# gradle-wrapper.jar is downloaded automatically by Gradle wrapper
+# DO NOT commit binary jars to git
+# The setup-gradle GitHub Action handles this automatically
