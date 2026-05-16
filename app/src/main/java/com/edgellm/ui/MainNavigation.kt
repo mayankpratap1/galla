@@ -78,10 +78,7 @@ fun MainNavigation() {
                 ChatScreen(vm)
             }
             composable("gallery") {
-                val context = LocalContext.current
-                val galleryVm: GalleryViewModel = viewModel(
-                    factory = GalleryViewModel.Factory(context)
-                )
+                val galleryVm: GalleryViewModel = viewModel()
                 GalleryScreen(
                     viewModel = galleryVm,
                     onModelSelected = { model ->

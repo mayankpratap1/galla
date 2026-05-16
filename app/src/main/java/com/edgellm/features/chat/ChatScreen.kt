@@ -16,7 +16,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun ChatScreen(vm: ChatViewModel = viewModel()) {
-    val state by vm.state.collectAsState()
+    val state by vm.uiState.collectAsState()
     val listState = rememberLazyListState()
     var input by remember { mutableStateOf("") }
     var showThinking by remember { mutableStateOf(false) }
@@ -55,7 +55,7 @@ fun ChatScreen(vm: ChatViewModel = viewModel()) {
             items(state.messages) { msg ->
                 MessageBubble(msg, showThinking)
             }
-            if (state.isGenerating) {
+            if (state.isLoading) {
                 item { GeneratingIndicator() }
             }
         }
@@ -70,12 +70,12 @@ fun ChatScreen(vm: ChatViewModel = viewModel()) {
                 onValueChange = { input = it },
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Message…") },
-                enabled = state.modelLoaded && !state.isGenerating
+                enabled = state.availableModels.isNotEmpty() && !state.isLoading
             )
             Spacer(Modifier.width(8.dp))
             Button(
-                onClick = { vm.sendMessage(input); input = "" },
-                enabled = input.isNotBlank() && state.modelLoaded && !state.isGenerating
+                onClick = { vm.onInputChange(input); vm.sendMessage(); input = "" },
+                enabled = input.isNotBlank() && state.availableModels.isNotEmpty() && !state.isLoading
             ) { Text("Send") }
         }
     }

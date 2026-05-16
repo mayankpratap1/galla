@@ -56,7 +56,7 @@ sealed class HttpMethod {
 }
 
 suspend inline fun <T> safeApiCall(
-    crossinline request: () -> Request,
-    crossinline mapper: (Response) -> T,
+    noinline request: () -> Request,
+    noinline mapper: (Response) -> T,
     client: NetworkClient
 ): Resource<T> = client.execute(request(), mapper)

@@ -18,7 +18,7 @@ import com.edgellm.domain.model.ProviderType
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    viewModel: SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 

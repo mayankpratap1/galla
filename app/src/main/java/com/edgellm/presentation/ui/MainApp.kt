@@ -69,12 +69,12 @@ fun MainApp(edgeService: EdgeLLMService?) {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("chat") {
-                com.edgellm.features.chat.ChatScreen(
-                    viewModel = com.edgellm.features.chat.ChatViewModel(
-                        engineRef = edgeService?.currentEngine,
-                        skillManager = edgeService?.skillManager
-                    )
-                )
+                val viewModel: com.edgellm.features.chat.ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                LaunchedEffect(edgeService?.currentEngine) {
+                    viewModel.engineRef = edgeService?.currentEngine
+                    viewModel.skillManager = edgeService?.skillManager
+                }
+                com.edgellm.features.chat.ChatScreen(vm = viewModel)
             }
             composable("gallery") {
                 val viewModel: GalleryViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -84,39 +84,41 @@ fun MainApp(edgeService: EdgeLLMService?) {
                 )
             }
             composable("vision") {
-                com.edgellm.features.askimage.AskImageScreen(
-                    viewModel = com.edgellm.features.askimage.AskImageViewModel(edgeService?.currentEngine)
-                )
+                val viewModel: com.edgellm.features.askimage.AskImageViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                LaunchedEffect(edgeService?.currentEngine) {
+                    viewModel.engineRef = edgeService?.currentEngine
+                }
+                com.edgellm.features.askimage.AskImageScreen(viewModel = viewModel)
             }
             composable("audio") {
-                com.edgellm.features.audioscribe.AudioScribeScreen(
-                    viewModel = com.edgellm.features.audioscribe.AudioScribeViewModel(edgeService?.currentEngine)
-                )
+                val viewModel: com.edgellm.features.audioscribe.AudioScribeViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                LaunchedEffect(edgeService?.currentEngine) {
+                    viewModel.engineRef = edgeService?.currentEngine
+                }
+                com.edgellm.features.audioscribe.AudioScribeScreen(viewModel = viewModel)
             }
             composable("lab") {
-                com.edgellm.features.promptlab.PromptLabScreen(
-                    viewModel = com.edgellm.features.promptlab.PromptLabViewModel(edgeService?.currentEngine)
-                )
+                val viewModel: com.edgellm.features.promptlab.PromptLabViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                LaunchedEffect(edgeService?.currentEngine) {
+                    viewModel.engineRef = edgeService?.currentEngine
+                }
+                com.edgellm.features.promptlab.PromptLabScreen(viewModel = viewModel)
             }
             composable("skills") {
-                com.edgellm.features.agentskills.AgentSkillsScreen(
-                    viewModel = com.edgellm.features.agentskills.AgentSkillsViewModel(
-                        engineRef = edgeService?.currentEngine,
-                        skillManager = edgeService?.skillManager
-                    ),
-                    skills = edgeService?.skillManager?.skills?.let { flow ->
-                        var result by mutableStateOf(emptyList<com.edgellm.skills.Skill>())
-                        androidx.compose.runtime.LaunchedEffect(Unit) {
-                            result = flow.collect { it }
-                        }
-                        result
-                    } ?: emptyList()
-                )
+                val viewModel: com.edgellm.features.agentskills.AgentSkillsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                LaunchedEffect(edgeService?.currentEngine, edgeService?.skillManager) {
+                    viewModel.engineRef = edgeService?.currentEngine
+                    viewModel.skillManager = edgeService?.skillManager
+                }
+                val skills by edgeService?.skillManager?.skills?.collectAsState(initial = emptyList()) ?: mutableStateOf(emptyList())
+                com.edgellm.features.agentskills.AgentSkillsScreen(viewModel = viewModel, skills = skills)
             }
             composable("benchmark") {
-                com.edgellm.features.benchmark.BenchmarkScreen(
-                    viewModel = com.edgellm.features.benchmark.BenchmarkViewModel(edgeService?.currentEngine)
-                )
+                val viewModel: com.edgellm.features.benchmark.BenchmarkViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                LaunchedEffect(edgeService?.currentEngine) {
+                    viewModel.engineRef = edgeService?.currentEngine
+                }
+                com.edgellm.features.benchmark.BenchmarkScreen(viewModel = viewModel)
             }
             composable("settings") {
                 com.edgellm.features.settings.SettingsScreen()

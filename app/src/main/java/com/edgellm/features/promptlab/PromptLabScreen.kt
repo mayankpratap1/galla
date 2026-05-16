@@ -61,7 +61,7 @@ fun PromptLabScreen(vm: PromptLabViewModel = viewModel()) {
             "Translate to Hindi:",
             "Explain this concept simply:"
         ).forEach { tmpl ->
-            AssistiveChip(
+            AssistChip(
                 onClick = { prompt = tmpl },
                 label = { Text(tmpl, style = MaterialTheme.typography.bodySmall) }
             )

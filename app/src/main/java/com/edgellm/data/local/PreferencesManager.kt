@@ -74,21 +74,21 @@ class PreferencesManager @Inject constructor(
     }
 
     suspend fun saveApiKey(provider: ApiProvider, key: String) {
-        val keyName = when (provider) {
+        val keyRef = when (provider) {
             ApiProvider.OPENAI -> KEY_API_KEY_OPENAI
             ApiProvider.ANTHROPIC -> KEY_API_KEY_ANTHROPIC
             ApiProvider.GEMINI -> KEY_API_KEY_GEMINI
         }
-        dataStore.edit { it[stringPreferencesKey(keyName)] = key }
+        dataStore.edit { it[keyRef] = key }
     }
 
     suspend fun getApiKey(provider: ApiProvider): String? {
-        val keyName = when (provider) {
+        val keyRef = when (provider) {
             ApiProvider.OPENAI -> KEY_API_KEY_OPENAI
             ApiProvider.ANTHROPIC -> KEY_API_KEY_ANTHROPIC
             ApiProvider.GEMINI -> KEY_API_KEY_GEMINI
         }
-        return dataStore.data.map { it[stringPreferencesKey(keyName)] }.first()
+        return dataStore.data.map { it[keyRef] }.first()
     }
 
     fun getModelsDirectory(): File {

@@ -24,7 +24,7 @@ class HuggingFaceApi @Inject constructor(
     }
 
     suspend fun searchModels(
-        query: String,
+        query: String = "",
         pipelineTag: String? = null,
         library: String? = null,
         sort: String = "downloads",
