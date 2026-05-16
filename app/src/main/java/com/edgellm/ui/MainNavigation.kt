@@ -19,7 +19,11 @@ import com.edgellm.features.chat.ChatScreen
 import com.edgellm.features.chat.ChatViewModel
 import com.edgellm.features.promptlab.PromptLabScreen
 import com.edgellm.features.promptlab.PromptLabViewModel
+import com.edgellm.features.gallery.GalleryScreen
+import com.edgellm.features.gallery.GalleryViewModel
 import com.edgellm.features.settings.SettingsScreen
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 
 data class NavItem(
     val route: String,
@@ -34,6 +38,7 @@ fun MainNavigation() {
 
     val items = listOf(
         NavItem("chat",        "Chat",     Icons.Default.Chat),
+        NavItem("gallery",     "Gallery",  Icons.Default.Download),
         NavItem("askimage",    "Vision",   Icons.Default.Image),
         NavItem("audioscribe", "Audio",    Icons.Default.Mic),
         NavItem("promptlab",   "Lab",      Icons.Default.Science),
@@ -71,6 +76,18 @@ fun MainNavigation() {
                     vm.setModelLoaded(service?.currentEngine?.isLoaded == true)
                 }
                 ChatScreen(vm)
+            }
+            composable("gallery") {
+                val context = LocalContext.current
+                val galleryVm: GalleryViewModel = viewModel(
+                    factory = GalleryViewModel.Factory(context)
+                )
+                GalleryScreen(
+                    viewModel = galleryVm,
+                    onModelSelected = { model ->
+                        // Navigate to model detail or show bottom sheet
+                    }
+                )
             }
             composable("askimage") {
                 val vm: AskImageViewModel = viewModel()

@@ -98,4 +98,13 @@ dependencies {
 
     // ── Markwon: Markdown rendering for skill cards ──
     implementation("io.noties.markwon:core:4.6.2")
+
+    // ── HuggingFace Hub API: Model Gallery (custom client with OkHttp) ──
+    // Using OkHttp - no additional dependency needed
+
+    // ── DataStore: Preferences storage ──
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // ── Security: Encrypted SharedPreferences for API keys ──
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }
