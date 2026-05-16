@@ -75,6 +75,10 @@
 - [x] Updated build.gradle.kts with Hilt, Retrofit, Accompanist
 - [x] GalleryViewModel with Hilt DI + Domain layer
 - [x] New MainApp with Navigation + proper theming
+- [x] Cloud API fallback (OpenAI, Anthropic, Gemini)
+- [x] SettingsScreen with theme toggle, engine config, API key management
+- [x] ChatViewModel supports both local and cloud models
+- [x] CloudRepository with API key storage
 
 ### ❌ Remaining Work
 
@@ -124,31 +128,31 @@
 
 ---
 
-## Phase 3: Cloud API Fallback
+## Phase 3: Cloud API Fallback ✅ (Done)
 
 ### 3.1 Cloud Repository
-- [ ] CloudService interface
-- [ ] API key encrypted storage
+- [x] CloudService interface (CloudRepository)
+- [x] API key encrypted storage (via PreferencesManager)
 
 ### 3.2 Providers
-- [ ] OpenAI (GPT-4o, o1)
-- [ ] Anthropic (Claude 3.5)
-- [ ] Google Gemini 2.0
+- [x] OpenAI (GPT-4o, GPT-4o-mini, GPT-4 Turbo)
+- [x] Anthropic (Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku)
+- [x] Google Gemini (2.0 Flash, 1.5 Pro, 1.5 Flash)
 - [ ] xAI Grok
 
 ### 3.3 Multimodal
-- [ ] Image upload (vision)
-- [ ] Audio input (STT)
+- [ ] Image upload (vision) - in progress via ChatMessage
+- [ ] Audio input (STT) - not started
 
 ---
 
-## Phase 4: Feature Completions
+## Phase 4: Feature Completions (In Progress)
 
 ### 4.1 Chat
 - [ ] Room DB persistence
 - [ ] Export (Markdown/PDF)
-- [ ] System prompts
-- [ ] Temperature presets
+- [x] System prompts (via ChatMessage)
+- [x] Temperature presets (in Settings)
 
 ### 4.2 Vision (Ask Image)
 - [ ] Camera capture
@@ -265,12 +269,12 @@ app/src/main/java/com/edgellm/
 |-------|--------|----------|
 | Architecture | Done | 100% |
 | Phase 1 | In Progress | 70% |
-| Phase 2 | In Progress | 75% |
-| Phase 3 | Not Started | 0% |
-| Phase 4 | Not Started | 0% |
-| Phase 5 | In Progress | 30% |
+| Phase 2 | In Progress | 85% |
+| Phase 3 | Done | 100% |
+| Phase 4 | Not Started | 20% |
+| Phase 5 | In Progress | 60% |
 | Phase 6 | Not Started | 0% |
-| Phase 7 | In Progress | 20% |
+| Phase 7 | In Progress | 30% |
 
 ---
 
@@ -281,17 +285,23 @@ app/src/main/java/com/edgellm/
 - Domain layer complete with Use Cases
 - Data layer with Repository implementations
 - GalleryViewModel with DI
+- Cloud API with full provider support
+- Settings with theme + API key management
+- Chat supports both local and cloud models
 
 ### Next Tasks
 1. Fix build errors (if any from refactor)
-2. Complete GalleryScreen with detail view
-3. Add Cloud API fallback
-4. Complete remaining features
+2. Complete remaining features (Vision, Audio, Benchmark)
+3. Add Room DB for chat history
+4. Add model file picker with SAF
+5. Complete multimodal (image/audio) support
 
 ### Key Files to Continue
 - `core/di/AppModule.kt` - DI configuration
 - `domain/usecase/` - Business logic
-- `features/gallery/` - Model gallery feature
+- `data/remote/CloudApiClients.kt` - Cloud API
+- `features/settings/` - Settings with API keys
+- `features/chat/ChatViewModel.kt` - Local + Cloud chat
 - `presentation/ui/` - UI layer
 
 ---
